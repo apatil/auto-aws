@@ -1,0 +1,19 @@
+opam-version: "1.2"
+name: "AWS_of_OCaml"
+version: "0.1"
+maintainer: "Anand Patil <anand.prabhakar.patil@gmail.com>"
+authors: "Anand Patil <anand.prabhakar.patil@gmail.com>"
+license: "MIT License"
+homepage: "https://github.com/apatil/aws_of_ocaml"
+bug-reports: "https://github.com/apatil/aws_of_ocaml/issues/list"
+dev-repo: "https://github.com/apatil/aws_of_ocaml"
+build: [
+  ["./configure" "--prefix=%{prefix}%"]
+  [make]
+]
+install: [make "install"]
+remove: ["ocamlfind" "remove" "AWS_of_OCaml"]
+depends: [
+  "ocamlfind" {build}
+  "yojson" {>= "1.1.8"}
+]
