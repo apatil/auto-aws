@@ -113,4 +113,4 @@ let shapes = signature |> member "shapes" |> to_assoc
 let typeNodes = List.map (shape2Compound Loc.ghost) (List.filter isCompound shapes)
 
 ;;
-List.map Printers.OCaml.print_implem typeNodes
+List.iter Printers.OCaml.print_implem typeNodes
