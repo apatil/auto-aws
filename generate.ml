@@ -99,7 +99,7 @@ let isCompound (name, shape) =
       match enum with
           `Null -> false
         | `List x when allCanBeVariants enum -> true
-        | `List x -> true
+        | `List x -> false
         | _ -> failwith @@ Printf.sprintf "Shape %s has non-list enum" name)
     | _ -> false 
 
@@ -108,7 +108,6 @@ let isCompound (name, shape) =
 (* This will produce a list of (string * json) tuples *)
 (* let oper = signature |> member "operations" |> to_assoc in *)
 let shapes = signature |> member "shapes" |> to_assoc |> (List.filter isCompound)
-(* let typeNodes = List.map (shape2Compound Loc.ghost) *)
 
 let getMemberDocs (name, el) =
   match el |> member "documentation" with
@@ -134,7 +133,8 @@ let printModuleDocs signature =
   Printf.printf "\n(**\n%s\n**)\n" (signature |> member "documentation" |> to_string)
 ;;
 
+(* let typeNodes = List.map (shape2Compound Loc.ghost) *)
+
 printModuleDocs signature;;
 List.iter generateShapeWithDocs shapes
 
-(* List.iter (fun (shape) -> Printf.printf "%s" (getDocs shape)) shapes *)
