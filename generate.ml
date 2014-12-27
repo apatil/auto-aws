@@ -74,7 +74,6 @@ let shape2List _loc (name, shape) =
   (* Is there a way to do this with all quotations? *)
   let typ = Ast.TyApp (_loc, <:ctyp<list>>, memberTyp) in
   let out = <:str_item<type $lid:name$ = $typ$>> in
-  Printers.OCaml.print_implem out;
   (* The return value is computed, but validate locationName to be sure we haven't missed anything. *)
   match memberDef |> member "locationName" with
       `String "item" -> out
@@ -106,11 +105,36 @@ let isCompound (name, shape) =
 
 (* let docs = member "documentation" signature in *)
 (* let meta = member "metadata" signature in *)
-
 (* This will produce a list of (string * json) tuples *)
 (* let oper = signature |> member "operations" |> to_assoc in *)
-let shapes = signature |> member "shapes" |> to_assoc
-let typeNodes = List.map (shape2Compound Loc.ghost) (List.filter isCompound shapes)
+let shapes = signature |> member "shapes" |> to_assoc |> (List.filter isCompound)
+(* let typeNodes = List.map (shape2Compound Loc.ghost) *)
 
+let getMemberDocs (name, el) =
+  match el |> member "documentation" with
+      `String x -> Printf.sprintf "\n  <li> %s: %s <\\li>" name x
+    | `Null -> ""
+    | _ -> failwith "Unrecognized member documentation type."
+let getDocs (name, shape)  =
+  let recordDocs = if (shape |> member "type" |> to_string) = "structure" 
+    then "\n<ul>" ^ (String.concat "" @@ List.map getMemberDocs (shape |> member "members" |> to_assoc)) ^ "\n<\\ul>"
+    else "" in
+  (* Printf.printf "%s\n" name; *)
+  match shape |> member "documentation" with
+      `String x -> Printf.sprintf "\n(**\n%s%s\n**)\n" x recordDocs
+    | `Null -> "\n"
+    | _ -> failwith "Unrecognized documentation type."
+
+let generateShapeWithDocs (name, shape) =(
+  let typeNode = shape2Compound Loc.ghost (name, shape) in
+  Printf.printf "%s" (getDocs (name, shape));
+  Printers.OCaml.print_implem @@ typeNode)
+
+let printModuleDocs signature =
+  Printf.printf "\n(**\n%s\n**)\n" (signature |> member "documentation" |> to_string)
 ;;
-List.iter Printers.OCaml.print_implem typeNodes
+
+printModuleDocs signature;;
+List.iter generateShapeWithDocs shapes
+
+(* List.iter (fun (shape) -> Printf.printf "%s" (getDocs shape)) shapes *)
