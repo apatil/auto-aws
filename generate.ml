@@ -18,9 +18,9 @@ let rec transformList _loc shapeName =
   let uncapShapeName = String.uncapitalize shapeName in
   match shapes |> member shapeName |> member "type" |> to_string with
     | "list" -> (
-        let memberTyp = shape |> member "member" |> member "shape" |> to_string |> transformBasicSubShape _loc in
-        (* Is there a way to do this with qusoations? *)
-        Ast.TyApp (_loc, <:ctyp<list>>, memberTyp))
+        let memberTyp = shape |> member "member" |> member "shape" |> to_string |> transformBasicSubShape _loc
+        in
+        <:ctyp<$memberTyp$ list>>)
     | _ -> <:ctyp<$uid:uncapShapeName$>>
 and transformBasicSubShape _loc shapeName = 
   match shapeName with
@@ -33,23 +33,25 @@ and transformBasicSubShape _loc shapeName =
     | "String" -> <:ctyp<string>>
     | _ -> transformList _loc shapeName
 
+(* TODO: Create a to/from xml for each type, using the COW XML type: *)
+let createTag tag data = <:expr< [`El ((("", $str:tag$), []), [`Data $data$])] >>
 let shape2Record _loc (name,shape) = 
   let shape2Field _loc (name, field) =
     let subShape = transformBasicSubShape _loc @@ to_string @@ member "shape" field in
     (_loc, (String.uncapitalize name), false, subShape)
+    (* Does not work: <:rec_binding< name : $uid:subShape$;>> *)
   in
   
   let entries = List.map (shape2Field _loc) (shape |> member "members" |> to_assoc) in
   (* TODO: Apply locationName here. *)
   (* TODO: Handle optional records here. *)
   let typeDef = Ast.record_type_of_list entries in
-  (* TODO: Equip with an XML transformer. *)
   <:str_item<type $lid:name$ = {$typeDef$}>>
 
-(* We try to make AWS enum strings into variant types, but some enums are nso legal OCaml identifiers. Examples:
-  * nso-applicable : We translate hyphens to camel casing.
+(* We try to make AWS enum strings into variant types, but some enums are not legal OCaml identifiers. Examples:
+  * not-applicable : We translate hyphens to camel casing.
   * t1.micro : We translate dsos to underscores.
-  * Linux/UNIX (Amazon VPC) : We give up and type the field as a string, nso an enum. 
+  * Linux/UNIX (Amazon VPC) : We give up and type the field as a string, not an enum. 
 These functions let us distinguish which enums can be variant types.*)
 let canBeVariant name = 
   let testRe = Str.regexp "^[a-zA-Z0-9\\.-\\ ]+$" in
@@ -65,10 +67,10 @@ let shape2Variant _loc (name, shape) =
     String.capitalize @@ (toCamel "\\.") @@ (toCamel "-") @@ (toCamel "\\ ") name
   in
   let ofStringMatch constructor str =
-    (Ast.McArr (_loc, (Ast.PaId (_loc, (Ast.IdUid (_loc, constructor)))), (Ast.ExNil _loc), (Ast.ExStr (_loc, str))))
+    <:match_case<$uid:constructor$ -> $str:str$>>
   in
   let stringOfMatch str constructor =
-    (Ast.McArr (_loc, (Ast.PaStr (_loc, str)), (Ast.ExNil _loc), (Ast.ExId (_loc, (Ast.IdUid (_loc, constructor))))))
+    <:match_case<$str:str$ -> $uid:constructor$>>
   in
   let declLine constructor =
     <:ctyp<$uid:constructor$ >>
@@ -90,7 +92,8 @@ let shape2Variant _loc (name, shape) =
     <:str_item<let $lid:osName$ x = match x with $list:os$>>
   in
   let createStringOf name so =
-    let defaultCase = (Ast.McArr (_loc, (Ast.PaId (_loc, (Ast.IdUid (_loc, "other")))), (Ast.ExNil _loc), <:expr<invalid_arg @@ Printf.sprintf "No variant of type %s corresponds to received value %s" name other>>)) in
+
+    let defaultCase = <:match_case< "other" -> invalid_arg @@ Printf.sprintf "No variant of type %s corresponds to received value %s" name other>> in
     let soName = Printf.sprintf "%s_of_string" name in
     let soWithDefault = so @ [defaultCase] in
     <:str_item<let $lid:soName$ x = match x with $list:soWithDefault$>>
