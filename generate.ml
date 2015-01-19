@@ -1,5 +1,6 @@
 open Yojson.Basic.Util
 open Camlp4.PreCast
+open Cow
 (* open Core.Std *)
 
 (* Define composition *)
@@ -33,20 +34,36 @@ and transformBasicSubShape _loc shapeName =
     | "String" -> <:ctyp<string>>
     | _ -> transformList _loc shapeName
 
+let ofName origin target = Printf.sprintf "%s_of_%s" target origin
+
 (* TODO: Create a to/from xml for each type, using the COW XML type: *)
-let createTag tag data = <:expr< [`El ((("", $str:tag$), []), [`Data $data$])] >>
+(* let createTag tag data = <:expr< [`El ((("", $str:tag$), []), [`Data $data$])] >> *)
 let shape2Record _loc (name,shape) = 
   let shape2Field _loc (name, field) =
     let subShape = transformBasicSubShape _loc @@ to_string @@ member "shape" field in
     (_loc, (String.uncapitalize name), false, subShape)
     (* Does not work: <:rec_binding< name : $uid:subShape$;>> *)
   in
-  
+  let createOfXml _loc name =
+    let oxName = ofName name "xml" in
+    <:str_item<let $lid:oxName$ x = x>>
+  in
+  let createXmlOf _loc name =
+    let xoName = ofName "xml" name in
+    <:str_item<let $lid:xoName$ x = <:xml< <foo>x</foo>&>>&>>
+  in
   let entries = List.map (shape2Field _loc) (shape |> member "members" |> to_assoc) in
   (* TODO: Apply locationName here. *)
   (* TODO: Handle optional records here. *)
   let typeDef = Ast.record_type_of_list entries in
-  <:str_item<type $lid:name$ = {$typeDef$}>>
+  let typeDecl = <:str_item<type $lid:name$ = {$typeDef$}>> in
+
+  let code = [
+    typeDecl;
+    createOfXml _loc name;
+    createXmlOf _loc name
+  ] in
+  <:str_item<$list:code$>>
 
 (* We try to make AWS enum strings into variant types, but some enums are not legal OCaml identifiers. Examples:
   * not-applicable : We translate hyphens to camel casing.
@@ -92,17 +109,23 @@ let shape2Variant _loc (name, shape) =
     <:str_item<let $lid:osName$ x = match x with $list:os$>>
   in
   let createStringOf name so =
-
     let defaultCase = <:match_case< "other" -> invalid_arg @@ Printf.sprintf "No variant of type %s corresponds to received value %s" name other>> in
     let soName = Printf.sprintf "%s_of_string" name in
     let soWithDefault = so @ [defaultCase] in
     <:str_item<let $lid:soName$ x = match x with $list:soWithDefault$>>
+  in
+  let createXmlOf name =
+    let oxName = Printf.sprintf "xml_of_%s" name in
+    let osName = Printf.sprintf "string_of_%s" name in    
+    <:str_item<let $lid:oxName$ x = [`Data ($uid:osName$ x)]>>
   in
   let (decl, so, os) = List.fold_left getVariant ([], [], []) (shape |> member "enum" |> to_list) in
   let code = [
     createDeclaration name decl;
     createOfString name os;
     createStringOf name so;
+    createXmlOf name;
+    (* TODO: make an ofXml that inverts XmlOf. *)
   ] in
   <:str_item<$list:code$>>
 
