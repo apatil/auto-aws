@@ -36,21 +36,33 @@ and transformBasicSubShape _loc shapeName =
 
 let ofName origin target = Printf.sprintf "%s_of_%s" target origin
 
-(* TODO: Create a to/from xml for each type, using the COW XML type: *)
+let listExpressionOfExpressionList _loc l =
+  let appendOp = (Ast.ExId (_loc, (Ast.IdUid (_loc, "::")))) in
+  let append e el = Ast.ExApp (_loc, (Ast.ExApp (_loc, appendOp, e)), el) in
+  let base = <:expr<[]>> in
+  (* ('a -> 'b -> 'b) -> 'a list -> 'b -> 'b *)
+  List.fold_right append l base
 (* let createTag tag data = <:expr< [`El ((("", $str:tag$), []), [`Data $data$])] >> *)
 let shape2Record _loc (name,shape) = 
   let shape2Field _loc (name, field) =
     let subShape = transformBasicSubShape _loc @@ to_string @@ member "shape" field in
-    (_loc, (String.uncapitalize name), false, subShape)
     (* Does not work: <:rec_binding< name : $uid:subShape$;>> *)
+    (_loc, (String.uncapitalize name), false, subShape)
+  in
+  let shape2XmlOf _loc (name, field) =
+    let uname = String.uncapitalize name in
+    let xoName = ofName uname "xml" in
+    <:expr< [`El ((("", $str:name$), []), $uid:xoName$ x.$uid:uname$)] >>
   in
   let createOfXml _loc name =
-    let oxName = ofName name "xml" in
+    let oxName = ofName "xml" name in
     <:str_item<let $lid:oxName$ x = x>>
   in
   let createXmlOf _loc name =
-    let xoName = ofName "xml" name in
-    <:str_item<let $lid:xoName$ x = <:xml< <foo>x</foo>&>>&>>
+    let xoName = ofName name "xml" in
+    let entries = List.map (shape2XmlOf _loc) (shape |> member "members" |> to_assoc) in
+    let entriesExpr = listExpressionOfExpressionList _loc entries in
+    <:str_item<let $lid:xoName$ x = $entriesExpr$>>
   in
   let entries = List.map (shape2Field _loc) (shape |> member "members" |> to_assoc) in
   (* TODO: Apply locationName here. *)
@@ -101,13 +113,13 @@ let shape2Variant _loc (name, shape) =
       (ofStringMatch constructor origName) :: os
     )
   in
-  let createDeclaration name decl = <:str_item<type $lid:name$ = $list:decl$>> 
-  in
+  let createDeclaration name decl = <:str_item<type $lid:name$ = $list:decl$>> in
   (* TODO: This should be createStringOf and so on, the names are mixed up. *)
   let createOfString name os =
     let osName = Printf.sprintf "string_of_%s" name in
     <:str_item<let $lid:osName$ x = match x with $list:os$>>
   in
+  (* TODO: implement invalid_arg,  *)
   let createStringOf name so =
     let defaultCase = <:match_case< "other" -> invalid_arg @@ Printf.sprintf "No variant of type %s corresponds to received value %s" name other>> in
     let soName = Printf.sprintf "%s_of_string" name in
@@ -155,6 +167,7 @@ let getMemberDocs (name, el) =
     | `String x -> Printf.sprintf "\n  <li> %s: %s <\\li>" name x
     | `Null -> ""
     | _ -> failwith "Unrecognized member documentation type."
+
 let getDocs (name, shape)  =
   let recordDocs = if (shape |> member "type" |> to_string) = "structure" 
     then "\n<ul>" ^ (String.concat "" @@ List.map getMemberDocs (shape |> member "members" |> to_assoc)) ^ "\n<\\ul>"
