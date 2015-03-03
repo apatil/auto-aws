@@ -10,7 +10,7 @@ let values = [ burgh; burgh ] in
              (Ast.ExNil _loc), <:expr<raise "BLARG">>)) *)
 
 
-<:expr<[]>>
+<:rec_binding<$lid:y$=0>>
 (* <:str_item<let blarg x = match s with $l$>> *)
 (* <:patt<Blah -> 0>> *)
 (* <:str_item<type $lid:x$ = $sh$>> *)

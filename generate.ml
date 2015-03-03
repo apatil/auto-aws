@@ -36,7 +36,7 @@ and transformBasicSubShape _loc shapeName =
 
 let ofName origin target = Printf.sprintf "%s_of_%s" target origin
 
-let listExpressionOfExpressionList _loc l =
+let list_expression_of_expression_list _loc l =
   let appendOp = (Ast.ExId (_loc, (Ast.IdUid (_loc, "::")))) in
   let append e el = Ast.ExApp (_loc, (Ast.ExApp (_loc, appendOp, e)), el) in
   let base = <:expr<[]>> in
@@ -44,6 +44,7 @@ let listExpressionOfExpressionList _loc l =
   List.fold_right append l base
 (* let createTag tag data = <:expr< [`El ((("", $str:tag$), []), [`Data $data$])] >> *)
 let shape2Record _loc (name,shape) = 
+  let assoc = (shape |> member "members" |> to_assoc) in
   let shape2Field _loc (name, field) =
     let subShape = transformBasicSubShape _loc @@ to_string @@ member "shape" field in
     (* Does not work: <:rec_binding< name : $uid:subShape$;>> *)
@@ -54,17 +55,27 @@ let shape2Record _loc (name,shape) =
     let xoName = ofName uname "xml" in
     <:expr< [`El ((("", $str:name$), []), $uid:xoName$ x.$uid:uname$)] >>
   in
+  let shape2OfXml _loc (name, field) =
+    let uname = String.uncapitalize name in
+    let oxName = ofName "xml" uname in
+    (* TODO: Inject code for the dictOfXml function at the top. *)
+    <:rec_binding< $lid:uname$ = $uid:oxName$ @@ __d.find $str:name$ >>
+  in
   let createOfXml _loc name =
     let oxName = ofName "xml" name in
-    <:str_item<let $lid:oxName$ x = x>>
+    let bindings = List.map (shape2OfXml _loc) assoc in
+    let recExpr = Ast.ExRec (_loc, (Ast.rbSem_of_list bindings), (Ast.ExNil _loc)) in
+    <:str_item<let $lid:oxName$ x = 
+      let __d = dictOfXml x in
+      $recExpr$>>
   in
   let createXmlOf _loc name =
     let xoName = ofName name "xml" in
-    let entries = List.map (shape2XmlOf _loc) (shape |> member "members" |> to_assoc) in
-    let entriesExpr = listExpressionOfExpressionList _loc entries in
+    let entries = List.map (shape2XmlOf _loc) assoc in
+    let entriesExpr = list_expression_of_expression_list _loc entries in
     <:str_item<let $lid:xoName$ x = $entriesExpr$>>
   in
-  let entries = List.map (shape2Field _loc) (shape |> member "members" |> to_assoc) in
+  let entries = List.map (shape2Field _loc) assoc in
   (* TODO: Apply locationName here. *)
   (* TODO: Handle optional records here. *)
   let typeDef = Ast.record_type_of_list entries in
