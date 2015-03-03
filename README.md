@@ -1,6 +1,10 @@
-# Aws_client
+# auto_aws
 
 An automatically generated AWS client along the lines of [aws-go](https://github.com/stripe/aws-go).
+
+## WIP warning
+
+I'm writing this to learn OCaml and it's not even close to usable yet.
 
 ## Notes
 
